@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       NAME: ${{ secrets.NAME || vars.NAME || 'cloud-mail' }}
       CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN || vars.CUSTOM_DOMAIN }}
       DOMAIN: ${{ secrets.DOMAIN || vars.DOMAIN }}
@@ -36,19 +37,21 @@ jobs:
 
     steps:
       - name: 🚚 检出代码仓库 / Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: ⚙ 设置 pnpm / Set up pnpm
-        uses: pnpm/action-setup@v4.1.0
+        uses: pnpm/action-setup@v6
         with:
-          version: latest
+          version: 10
 
       - name: ⚙ 设置 Node.js / Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
-          cache-dependency-path: "./mail-worker/pnpm-lock.yaml"
+          cache-dependency-path: |
+            ./mail-worker/pnpm-lock.yaml
+            ./mail-vue/pnpm-lock.yaml
 
       - name: 📦 安装依赖 / Install dependencies
         run: pnpm install --frozen-lockfile
@@ -64,8 +67,8 @@ jobs:
           
           echo "🔐 Starting environment setup..."
           
-          if [ -z "$JWT_SECRET" ] || grep -q '[?%#/\\]' <<< "$JWT_SECRET"; then
-            echo "❌ JWT_SECRET variable is empty or contains invalid characters (?, %, #, /, \\)."
+          if [ -z "$JWT_SECRET" ]; then
+            echo "❌ JWT_SECRET variable cannot be empty."
             exit 1
           fi
           
@@ -239,7 +242,7 @@ jobs:
             exit 1
           fi
           
-          HTTP_CODE=$(curl -sL -w "%{http_code}" -o response.txt "$WORKER_URL/api/init/${JWT_SECRET}")
+          HTTP_CODE=$(curl -sL -w "%{http_code}" -o response.txt -H "x-init-secret: $JWT_SECRET" "$WORKER_URL/api/init")
           RESPONSE_BODY=$(cat response.txt)
 
           if [ "$RESPONSE_BODY" = "success" ]; then
