@@ -166,7 +166,14 @@ const publicService = {
 
 		const uuid = uuidv4();
 
-		await c.env.kv.put(KvConst.PUBLIC_KEY, uuid);
+		try {
+			await c.env.kv.put(KvConst.PUBLIC_KEY, uuid);
+		} catch (error) {
+			if (error?.message?.includes('KV put() limit exceeded for the day') || error?.message?.includes('limit exceeded for the day')) {
+				throw new BizError('KV daily write limit reached. Please retry after quota reset or upgrade KV plan.', 429);
+			}
+			throw error;
+		}
 
 		return {token: uuid}
 	},

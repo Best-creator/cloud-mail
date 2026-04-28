@@ -11,11 +11,55 @@ import verifyRecordService from './verify-record-service';
 
 const settingService = {
 
-	async refresh(c) {
+	isKvDailyLimitError(error) {
+		const message = error?.message || '';
+		return message.includes('KV put() limit exceeded for the day') || message.includes('limit exceeded for the day');
+	},
+
+	parseResendTokens(raw) {
+		if (raw && typeof raw === 'object') {
+			return raw;
+		}
+		try {
+			return JSON.parse(raw || '{}');
+		} catch (_error) {
+			return {};
+		}
+	},
+
+	async loadSettingFromDB(c) {
 		const settingRow = await orm(c).select().from(setting).get();
-		settingRow.resendTokens = JSON.parse(settingRow.resendTokens);
+		if (!settingRow) {
+			return null;
+		}
+		return {
+			...settingRow,
+			resendTokens: this.parseResendTokens(settingRow.resendTokens)
+		};
+	},
+
+	async syncSettingToKV(c, settingRow) {
+		if (!c?.env?.kv) {
+			return;
+		}
+		try {
+			await c.env.kv.put(KvConst.SETTING, JSON.stringify(settingRow));
+		} catch (error) {
+			if (this.isKvDailyLimitError(error)) {
+				console.warn('KV write skipped: daily KV write limit reached.');
+				return;
+			}
+			throw error;
+		}
+	},
+
+	async refresh(c) {
+		const settingRow = await this.loadSettingFromDB(c);
+		if (!settingRow) {
+			throw new BizError('数据库未初始化 Database not initialized.');
+		}
 		c.set('setting', settingRow);
-		await c.env.kv.put(KvConst.SETTING, JSON.stringify(settingRow));
+		await this.syncSettingToKV(c, settingRow);
 	},
 
 	async query(c) {
@@ -24,10 +68,20 @@ const settingService = {
 			return c.get('setting')
 		}
 
-		const setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
+		let setting = null;
+		if (c?.env?.kv) {
+			try {
+				setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
+			} catch (error) {
+				console.warn(`KV read failed: ${error.message}`);
+			}
+		}
 
 		if (!setting) {
-			throw new BizError('数据库未初始化 Database not initialized.');
+			setting = await this.loadSettingFromDB(c);
+			if (!setting) {
+				throw new BizError('数据库未初始化 Database not initialized.');
+			}
 		}
 
 		let domainList = c.env.domain;
@@ -75,7 +129,8 @@ const settingService = {
 		setting.linuxdoCallbackUrl = c.env.linuxdo_callback_url;
 		setting.linuxdoSwitch = linuxdoSwitch;
 
-		setting.emailPrefixFilter = setting.emailPrefixFilter.split(",").filter(Boolean);
+		setting.resendTokens = this.parseResendTokens(setting.resendTokens);
+		setting.emailPrefixFilter = (setting.emailPrefixFilter || '').split(",").filter(Boolean);
 
 		c.set?.('setting', setting);
 		return setting;
