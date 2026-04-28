@@ -3,9 +3,9 @@ import orm from '../entity/orm';
 import email from '../entity/email';
 import { desc, count, eq, and, ne, isNotNull } from 'drizzle-orm';
 import { emailConst } from '../const/entity-const';
-import kvConst from '../const/kv-const';
 import dayjs from 'dayjs';
 import { toUtc } from '../utils/date-uitil';
+import sendDayCountService from './send-day-count-service';
 const analysisService = {
 
 	async echarts(c, params) {
@@ -48,7 +48,7 @@ const analysisService = {
 			analysisDao.receiveDayCount(c, diffHours),
 			analysisDao.sendDayCount(c, diffHours),
 
-			c.env.kv.get(kvConst.SEND_DAY_COUNT + dayjs().format('YYYY-MM-DD')),
+			sendDayCountService.get(c, dayjs().format('YYYY-MM-DD')),
 		]);
 
 

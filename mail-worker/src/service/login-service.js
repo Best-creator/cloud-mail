@@ -4,8 +4,6 @@ import emailUtils from '../utils/email-utils';
 import { isDel, settingConst, userConst } from '../const/entity-const';
 import JwtUtils from '../utils/jwt-utils';
 import { v4 as uuidv4 } from 'uuid';
-import KvConst from '../const/kv-const';
-import constant from '../const/constant';
 import userContext from '../security/user-context';
 import verifyUtils from '../utils/verify-utils';
 import accountService from './account-service';
@@ -19,6 +17,7 @@ import dayjs from 'dayjs';
 import { toUtc } from '../utils/date-uitil';
 import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
+import authSessionService from './auth-session-service';
 
 const loginService = {
 
@@ -228,9 +227,11 @@ const loginService = {
 		const uuid = uuidv4();
 		const jwt = await JwtUtils.generateToken(c,{ userId: userRow.userId, token: uuid });
 
-		let authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userRow.userId, { type: 'json' });
+		let authInfo = await authSessionService.selectByUserId(c, userRow.userId);
 
 		if (authInfo && (authInfo.user.email === userRow.email)) {
+
+			authInfo.user = userRow;
 
 			if (authInfo.tokens.length > 10) {
 				authInfo.tokens.shift();
@@ -251,17 +252,13 @@ const loginService = {
 		}
 
 		await userService.updateUserInfo(c, userRow.userId);
-
-		await c.env.kv.put(KvConst.AUTH_INFO + userRow.userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		await authSessionService.save(c, authInfo);
 		return jwt;
 	},
 
 	async logout(c, userId) {
 		const token =userContext.getToken(c);
-		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
-		const index = authInfo.tokens.findIndex(item => item === token);
-		authInfo.tokens.splice(index, 1);
-		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo));
+		await authSessionService.removeToken(c, userId, token);
 	}
 
 };

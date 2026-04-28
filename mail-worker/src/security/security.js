@@ -7,6 +7,7 @@ import userService from '../service/user-service';
 import permService from '../service/perm-service';
 import { t } from '../i18n/i18n'
 import app from '../hono/hono';
+import authSessionService from '../service/auth-session-service';
 
 const exclude = [
 	'/login',
@@ -119,7 +120,7 @@ app.use('*', async (c, next) => {
 	}
 
 	const { userId, token } = result;
-	const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
+	const authInfo = await authSessionService.selectByUserId(c, userId);
 
 	if (!authInfo) {
 		throw new BizError(t('authExpired'), 401);
@@ -149,13 +150,14 @@ app.use('*', async (c, next) => {
 
 	}
 
-	const refreshTime = dayjs(authInfo.refreshTime).startOf('day');
+	const refreshDay = dayjs(authInfo.refreshTime);
+	const refreshTime = refreshDay.isValid() ? refreshDay.startOf('day') : dayjs().subtract(1, 'day').startOf('day');
 	const nowTime = dayjs().startOf('day')
 
 	if (!nowTime.isSame(refreshTime)) {
 		authInfo.refreshTime = dayjs().toISOString();
 		await userService.updateUserInfo(c, authInfo.user.userId);
-		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		await authSessionService.save(c, authInfo);
 	}
 
 	c.set('user',authInfo.user)

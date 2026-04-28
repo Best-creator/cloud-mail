@@ -14,13 +14,12 @@ import userService from './user-service';
 import roleService from './role-service';
 import user from '../entity/user';
 import starService from './star-service';
-import dayjs from 'dayjs';
-import kvConst from '../const/kv-const';
 import { t } from '../i18n/i18n'
 import domainUtils from '../utils/domain-uitls';
 import account from "../entity/account";
 import { att } from '../entity/att';
 import telegramService from './telegram-service';
+import sendDayCountService from './send-day-count-service';
 
 const emailService = {
 
@@ -353,16 +352,7 @@ const emailService = {
 			await this.HandleOnSiteEmail(c, receiveEmail, emailResult, attList);
 		}
 
-		const dateStr = dayjs().format('YYYY-MM-DD');
-		let daySendTotal = await c.env.kv.get(kvConst.SEND_DAY_COUNT + dateStr);
-
-		//记录每天发件次数统计
-		if (!daySendTotal) {
-			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(receiveEmail.length), { expirationTtl: 60 * 60 * 24 });
-		} else  {
-			daySendTotal = Number(daySendTotal) + receiveEmail.length
-			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(daySendTotal), { expirationTtl: 60 * 60 * 24 });
-		}
+		await sendDayCountService.increase(c, receiveEmail.length);
 
 		return [ emailResult ];
 	},

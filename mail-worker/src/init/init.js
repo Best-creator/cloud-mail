@@ -28,8 +28,34 @@ const dbInit = {
 		await this.v2_7DB(c);
 		await this.v2_8DB(c);
 		await this.v2_9DB(c);
+		await this.v3DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	async v3DB(c) {
+		try {
+			await c.env.db.batch([
+				c.env.db.prepare(`
+					CREATE TABLE IF NOT EXISTS auth_session (
+						user_id INTEGER PRIMARY KEY NOT NULL,
+						tokens TEXT NOT NULL,
+						user_json TEXT NOT NULL,
+						refresh_time DATETIME NOT NULL,
+						update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+					)
+				`),
+				c.env.db.prepare(`
+					CREATE TABLE IF NOT EXISTS send_day_count (
+						day TEXT PRIMARY KEY NOT NULL,
+						total INTEGER NOT NULL DEFAULT 0,
+						update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+					)
+				`)
+			]);
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
 	},
 
 	async v2_9DB(c) {
